@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Live Camera</title>
+</head>
+<body>
+
+<h2>Caméra utilisateur (temps réel)</h2>
+<video id="remoteVideo" autoplay playsinline></video>
+
+<script>
+  const video = document.getElementById('remoteVideo');
+  const pc = new RTCPeerConnection();
+
+  const socket = new WebSocket('wss://TON-SERVEUR-SIGNALING');
+
+  pc.ontrack = (event) => {
+    video.srcObject = event.streams[0];
+  };
+
+  socket.onmessage = async (msg) => {
+    const data = JSON.parse(msg.data);
+
+    if (data.type === 'offer') {
+      await pc.setRemoteDescription(data.offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.send(JSON.stringify({ type: 'answer', answer }));
+    }
+
+    if (data.type === 'candidate') {
+      await pc.addIceCandidate(data.candidate);
+    }
+  };
+
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.send(JSON.stringify({ type:'candidate', candidate:e.candidate }));
+    }
+  };
+</script>
+
+</body>
+</html>

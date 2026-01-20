@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!--
+  DEMO WEBRTC – CAMERA TEMPS RÉEL AVEC CONSENTEMENT
+  --------------------------------------------------
+  ⚠️ IMPORTANT :
+  - L'utilisateur VOIT sa caméra
+  - L'utilisateur SAIT que l'admin reçoit le flux
+  - Aucune dissimulation, aucun contournement
+  - Usage pédagogique uniquement
+
+  Fonctionnement :
+  - Cette page = côté UTILISATEUR
+  - Le flux caméra est envoyé via WebRTC (P2P)
+  - Le signaling (échange d'offres) se fait via un serveur WebSocket (non inclus ici)
+-->
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebRTC Camera – Consentement</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#0b0f14; color:#e5e7eb; padding:40px }
+    h1 { margin-bottom:10px }
+    button { padding:10px 16px; border-radius:8px; border:0; cursor:pointer }
+    button.primary { background:#2563eb; color:white }
+    button.stop { background:#374151; color:white }
+    video { width:100%; max-width:500px; margin-top:20px; border-radius:10px; background:black }
+    .box { background:#020617; padding:20px; border-radius:12px; max-width:600px }
+    .warn { color:#f59e0b }
+  </style>
+</head>
+<body>
+
+  <div class="box">
+    <h1>Partage caméra en temps réel</h1>
+    <p class="warn">
+      En cliquant sur "Autoriser", vous acceptez que votre caméra soit transmise en temps réel
+      à un autre participant (admin).
+    </p>
+
+    <button id="start" class="primary">Autoriser et démarrer la caméra</button>
+    <button id="stop" class="stop" disabled>Arrêter</button>
+
+    <video id="video" autoplay playsinline muted></video>
+  </div>
+
+<script>
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+  const video = document.getElementById('video');
+
+  let stream;
+  let pc;
+
+  // ⚠️ À remplacer par TON serveur de signaling
+  const socket = new WebSocket('wss://TON-SERVEUR-SIGNALING');
+
+  startBtn.onclick = async () => {
+    stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+    video.srcObject = stream;
+
+    pc = new RTCPeerConnection();
+
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    pc.onicecandidate = e => {
+      if (e.candidate) {
+        socket.send(JSON.stringify({ type:'candidate', candidate:e.candidate }));
+      }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    socket.send(JSON.stringify({ type:'offer', offer }));
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  };
+
+  socket.onmessage = async (msg) => {
+    const data = JSON.parse(msg.data);
+
+    if (data.type === 'answer') {
+      await pc.setRemoteDescription(data.answer);
+    }
+
+    if (data.type === 'candidate') {
+      await pc.addIceCandidate(data.candidate);
+    }
+  };
+
+  stopBtn.onclick = () => {
+    stream.getTracks().forEach(t => t.stop());
+    pc.close();
+    video.srcObject = null;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  };
+</script>
+</body>
+</html>
