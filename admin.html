@@ -12,16 +12,14 @@
 <script>
   const video = document.getElementById('remoteVideo');
 
+  // <-- UNE SEULE FOIS
   const pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
   });
 
   const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
 
-  socket.onopen = () => {
-    console.log("WebSocket connecté (admin)");
-    socket.send(JSON.stringify({ type: "admin-join" }));
-  };
+  socket.onopen = () => console.log("WebSocket connecté (admin)");
 
   pc.ontrack = (event) => {
     video.srcObject = event.streams[0];
@@ -47,12 +45,7 @@
       socket.send(JSON.stringify({ type:'candidate', candidate:e.candidate }));
     }
   };
-  const pc = new RTCPeerConnection({
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-});
-
 </script>
 
 </body>
 </html>
-
