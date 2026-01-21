@@ -11,46 +11,52 @@
 
 <script>
   const video = document.getElementById('remoteVideo');
-  const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
 
-  let pc = new RTCPeerConnection();
+  let pc = null;
+
+  const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
 
   socket.onopen = () => {
     console.log("WebSocket connecté (admin)");
-    socket.send(JSON.stringify({ type: "identify", role: "admin" }));
+    socket.send(JSON.stringify({ type: 'admin-ready' }));
   };
 
   socket.onmessage = async (msg) => {
-    const data = JSON.parse(msg.data);
-    console.log("message reçu admin:", data);
+    // ⚠️ IMPORTANT : parfois msg.data est un Blob
+    const dataRaw = msg.data;
+
+    // si ce n'est pas une string, ignore
+    if (typeof dataRaw !== "string") {
+      console.log("Message reçu (non JSON) -> ignore:", dataRaw);
+      return;
+    }
+
+    const data = JSON.parse(dataRaw);
 
     if (data.type === 'offer') {
-      await pc.setRemoteDescription(data.offer);
+      pc = new RTCPeerConnection();
 
+      pc.ontrack = (event) => {
+        video.srcObject = event.streams[0];
+      };
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socket.send(JSON.stringify({ type:'candidate', candidate:e.candidate }));
+        }
+      };
+
+      await pc.setRemoteDescription(data.offer);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
       socket.send(JSON.stringify({ type: 'answer', answer }));
-      console.log("answer envoyé");
     }
 
     if (data.type === 'candidate') {
-      await pc.addIceCandidate(data.candidate);
-      console.log("candidate ajouté admin");
-    }
-  };
-
-  pc.ontrack = (event) => {
-    video.srcObject = event.streams[0];
-  };
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) {
-      socket.send(JSON.stringify({
-        type: 'candidate',
-        role: 'admin',
-        candidate: e.candidate
-      }));
+      if (pc) {
+        await pc.addIceCandidate(data.candidate);
+      }
     }
   };
 </script>
