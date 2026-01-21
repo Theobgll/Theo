@@ -7,10 +7,9 @@
 </head>
 <body>
 
-  <h1>Partage caméra en temps réel</h1>
-  <button id="start">Autoriser</button>
-  <button id="stop" disabled>Arrêter</button>
-  <video id="video" autoplay playsinline muted></video>
+<button id="start">Autoriser et démarrer la caméra</button>
+<button id="stop" disabled>Arrêter</button>
+<video id="video" autoplay playsinline muted></video>
 
 <script>
   const startBtn = document.getElementById('start');
@@ -23,22 +22,25 @@
   const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
 
   socket.onopen = () => {
-    console.log("WebSocket connecté (index)");
-    socket.send(JSON.stringify({ type: "identify", role: "user" }));
+    console.log("WebSocket connecté (user)");
   };
 
   socket.onmessage = async (msg) => {
-    const data = JSON.parse(msg.data);
-    console.log("message reçu index:", data);
+    const dataRaw = msg.data;
+    if (typeof dataRaw !== "string") return;
+
+    const data = JSON.parse(dataRaw);
+
+    if (data.type === 'admin-ready') {
+      console.log("Admin ready");
+    }
 
     if (data.type === 'answer') {
       await pc.setRemoteDescription(data.answer);
-      console.log("answer reçu");
     }
 
     if (data.type === 'candidate') {
       await pc.addIceCandidate(data.candidate);
-      console.log("candidate ajouté index");
     }
   };
 
@@ -52,11 +54,7 @@
 
     pc.onicecandidate = e => {
       if (e.candidate) {
-        socket.send(JSON.stringify({
-          type: 'candidate',
-          role: 'user',
-          candidate: e.candidate
-        }));
+        socket.send(JSON.stringify({ type:'candidate', candidate:e.candidate }));
       }
     };
 
@@ -64,7 +62,6 @@
     await pc.setLocalDescription(offer);
 
     socket.send(JSON.stringify({ type:'offer', offer }));
-    console.log("offer envoyé");
 
     startBtn.disabled = true;
     stopBtn.disabled = false;
@@ -78,5 +75,6 @@
     stopBtn.disabled = true;
   };
 </script>
+
 </body>
 </html>
