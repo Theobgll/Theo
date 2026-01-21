@@ -8,8 +8,11 @@
 <body>
 
   <h1>Partage caméra en temps réel</h1>
-  <button id="start">Autoriser et démarrer</button>
+  <p>En cliquant sur "Autoriser", tu acceptes que l'admin reçoive le flux.</p>
+
+  <button id="start">Autoriser</button>
   <button id="stop" disabled>Arrêter</button>
+
   <video id="video" autoplay playsinline muted></video>
 
 <script>
@@ -20,17 +23,44 @@
   let stream;
   let pc;
 
+  let ready = false;
+
   const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
 
-  socket.onopen = () => console.log("WebSocket connecté (user)");
+  socket.onopen = () => {
+    console.log("WebSocket connecté (user)");
+  };
+
+  socket.onmessage = async (msg) => {
+    console.log("message reçu user:", msg.data);
+    const data = JSON.parse(msg.data);
+
+    if (data.type === 'ready') {
+      ready = true;
+      console.log("Admin prêt");
+    }
+
+    if (data.type === 'answer') {
+      await pc.setRemoteDescription(data.answer);
+      console.log("answer reçu");
+    }
+
+    if (data.type === 'candidate') {
+      await pc.addIceCandidate(data.candidate);
+      console.log("candidate ajouté user");
+    }
+  };
+
+  socket.onclose = () => console.log("WebSocket fermé (user)");
+  socket.onerror = (e) => console.log("Erreur WebSocket (user)", e);
 
   startBtn.onclick = async () => {
+    if (!ready) return alert("Attends que l'admin soit connecté");
+
     stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
     video.srcObject = stream;
 
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+    pc = new RTCPeerConnection();
 
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
@@ -45,22 +75,9 @@
 
     socket.send(JSON.stringify({ type:'offer', offer }));
     console.log("offer envoyé");
-    
+
     startBtn.disabled = true;
     stopBtn.disabled = false;
-  };
-
-  socket.onmessage = async (msg) => {
-    const data = JSON.parse(msg.data);
-
-    if (data.type === 'answer') {
-      console.log("answer reçu");
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-    }
-
-    if (data.type === 'candidate') {
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-    }
   };
 
   stopBtn.onclick = () => {
