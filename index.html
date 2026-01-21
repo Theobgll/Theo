@@ -4,31 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WebRTC Camera – Consentement</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#0b0f14; color:#e5e7eb; padding:40px }
-    h1 { margin-bottom:10px }
-    button { padding:10px 16px; border-radius:8px; border:0; cursor:pointer }
-    button.primary { background:#2563eb; color:white }
-    button.stop { background:#374151; color:white }
-    video { width:100%; max-width:500px; margin-top:20px; border-radius:10px; background:black }
-    .box { background:#020617; padding:20px; border-radius:12px; max-width:600px }
-    .warn { color:#f59e0b }
-  </style>
 </head>
 <body>
 
-  <div class="box">
-    <h1>Partage caméra en temps réel</h1>
-    <p class="warn">
-      En cliquant sur "Autoriser", vous acceptez que votre caméra soit transmise en temps réel
-      à un autre participant (admin).
-    </p>
-
-    <button id="start" class="primary">Autoriser et démarrer la caméra</button>
-    <button id="stop" class="stop" disabled>Arrêter</button>
-
-    <video id="video" autoplay playsinline muted></video>
-  </div>
+  <h1>Partage caméra en temps réel</h1>
+  <button id="start">Autoriser et démarrer</button>
+  <button id="stop" disabled>Arrêter</button>
+  <video id="video" autoplay playsinline muted></video>
 
 <script>
   const startBtn = document.getElementById('start');
@@ -40,10 +22,7 @@
 
   const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
 
-  socket.onopen = () => {
-    console.log("WebSocket connecté (user)");
-    socket.send(JSON.stringify({ type: "user-join" }));
-  };
+  socket.onopen = () => console.log("WebSocket connecté (user)");
 
   startBtn.onclick = async () => {
     stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
@@ -61,27 +40,27 @@
       }
     };
 
-    // On attend que l'admin soit prêt avant d'envoyer l'offre
-    socket.onmessage = async (msg) => {
-      const data = JSON.parse(msg.data);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-      if (data.type === 'admin-ready') {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.send(JSON.stringify({ type:'offer', offer }));
-      }
-
-      if (data.type === 'answer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      }
-
-      if (data.type === 'candidate') {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
-    };
-
+    socket.send(JSON.stringify({ type:'offer', offer }));
+    console.log("offer envoyé");
+    
     startBtn.disabled = true;
     stopBtn.disabled = false;
+  };
+
+  socket.onmessage = async (msg) => {
+    const data = JSON.parse(msg.data);
+
+    if (data.type === 'answer') {
+      console.log("answer reçu");
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    }
+
+    if (data.type === 'candidate') {
+      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
   };
 
   stopBtn.onclick = () => {
@@ -91,11 +70,6 @@
     startBtn.disabled = false;
     stopBtn.disabled = true;
   };
-  pc = new RTCPeerConnection({
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-});
-
 </script>
 </body>
 </html>
-
