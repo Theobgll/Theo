@@ -1,31 +1,38 @@
-// server.js
 const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const wss = new WebSocket.Server({ port: PORT });
 
-let clients = [];
+let admin = null;
+let user = null;
 
 wss.on('connection', (ws) => {
-  clients.push(ws);
-  console.log('Client connecté. Total :', clients.length);
+  console.log('Client connecté');
 
   ws.on('message', (message) => {
-    // Relaye le message à tous les autres clients
-    clients.forEach(client => {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    });
+    const data = JSON.parse(message);
+
+    // identification
+    if (data.type === "identify") {
+      if (data.role === "admin") admin = ws;
+      if (data.role === "user") user = ws;
+      console.log("Admin:", !!admin, "User:", !!user);
+      return;
+    }
+
+    // relay
+    if (data.type === "offer" && admin) admin.send(message);
+    if (data.type === "answer" && user) user.send(message);
+    if (data.type === "candidate") {
+      if (data.role === "user" && admin) admin.send(message);
+      if (data.role === "admin" && user) user.send(message);
+    }
   });
 
   ws.on('close', () => {
-    clients = clients.filter(c => c !== ws);
-    console.log('Client déconnecté. Total :', clients.length);
-  });
-
-  ws.on('error', (err) => {
-    console.log('Erreur WS:', err);
+    if (ws === admin) admin = null;
+    if (ws === user) user = null;
+    console.log('Client déconnecté');
   });
 });
 
