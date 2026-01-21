@@ -12,36 +12,44 @@
 <script>
   const video = document.getElementById('remoteVideo');
 
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  });
-
   const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
 
-  socket.onopen = () => console.log("WebSocket connecté (admin)");
+  let pc = new RTCPeerConnection();
 
-  pc.ontrack = (event) => {
-    video.srcObject = event.streams[0];
+  socket.onopen = () => {
+    console.log("WebSocket connecté (admin)");
+    socket.send(JSON.stringify({ type: 'ready' }));
   };
 
   socket.onmessage = async (msg) => {
+    console.log("message reçu admin:", msg.data);
+
     const data = JSON.parse(msg.data);
 
     if (data.type === 'offer') {
-      console.log("offer reçu");
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      await pc.setRemoteDescription(data.offer);
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+
       socket.send(JSON.stringify({ type: 'answer', answer }));
       console.log("answer envoyé");
     }
 
     if (data.type === 'candidate') {
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      await pc.addIceCandidate(data.candidate);
+      console.log("candidate ajouté admin");
     }
   };
 
-  pc.onicecandidate = e => {
+  socket.onclose = () => console.log("WebSocket fermé (admin)");
+  socket.onerror = (e) => console.log("Erreur WebSocket (admin)", e);
+
+  pc.ontrack = (event) => {
+    video.srcObject = event.streams[0];
+  };
+
+  pc.onicecandidate = (e) => {
     if (e.candidate) {
       socket.send(JSON.stringify({ type:'candidate', candidate:e.candidate }));
     }
