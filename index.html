@@ -1,18 +1,4 @@
 <!DOCTYPE html>
-<!--
-  DEMO WEBRTC – CAMERA TEMPS RÉEL AVEC CONSENTEMENT
-  --------------------------------------------------
-  ⚠️ IMPORTANT :
-  - L'utilisateur VOIT sa caméra
-  - L'utilisateur SAIT que l'admin reçoit le flux
-  - Aucune dissimulation, aucun contournement
-  - Usage pédagogique uniquement
-
-  Fonctionnement :
-  - Cette page = côté UTILISATEUR
-  - Le flux caméra est envoyé via WebRTC (P2P)
-  - Le signaling (échange d'offres) se fait via un serveur WebSocket (non inclus ici)
--->
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
@@ -52,16 +38,20 @@
   let stream;
   let pc;
 
-  // ⚠️ À remplacer par TON serveur de signaling
-const socket = new WebSocket(
-  'wss://theo-bgll-github-io.onrender.com'
-);
+  const socket = new WebSocket('wss://theo-bgll-github-io.onrender.com');
+
+  socket.onopen = () => {
+    console.log("WebSocket connecté (user)");
+    socket.send(JSON.stringify({ type: "user-join" }));
+  };
 
   startBtn.onclick = async () => {
     stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
     video.srcObject = stream;
 
-    pc = new RTCPeerConnection();
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
 
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
@@ -71,25 +61,27 @@ const socket = new WebSocket(
       }
     };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+    // On attend que l'admin soit prêt avant d'envoyer l'offre
+    socket.onmessage = async (msg) => {
+      const data = JSON.parse(msg.data);
 
-    socket.send(JSON.stringify({ type:'offer', offer }));
+      if (data.type === 'admin-ready') {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.send(JSON.stringify({ type:'offer', offer }));
+      }
+
+      if (data.type === 'answer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      }
+
+      if (data.type === 'candidate') {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    };
 
     startBtn.disabled = true;
     stopBtn.disabled = false;
-  };
-
-  socket.onmessage = async (msg) => {
-    const data = JSON.parse(msg.data);
-
-    if (data.type === 'answer') {
-      await pc.setRemoteDescription(data.answer);
-    }
-
-    if (data.type === 'candidate') {
-      await pc.addIceCandidate(data.candidate);
-    }
   };
 
   stopBtn.onclick = () => {
@@ -102,4 +94,3 @@ const socket = new WebSocket(
 </script>
 </body>
 </html>
-
